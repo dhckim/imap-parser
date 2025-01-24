@@ -1,0 +1,19 @@
+{
+  "name": "imap-parser",
+  "version": "1.0.0",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "author": "",
+  "license": "ISC",
+  "description": "",
+  "dependencies": {
+    "imap": "^0.8.19",
+    "imap-simple": "^1.6.3",
+    "mailparser": "^3.7.2",
+    "node-pop3": "^0.9.0",
+    "poplib": "^0.1.7",
+    "tls": "^0.0.1"
+  }
+}
