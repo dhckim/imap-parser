@@ -2,10 +2,12 @@ const Imap = require('imap');
 const { simpleParser } = require('mailparser');
 const fs = require('fs');
 const nodemailer = require('nodemailer');
+const path = require('path');
+const mimemessage = require('mimemessage');
 
 const imap = new Imap({
     user: 'xxxx@gmail.com',
-    password: 'xxxxxx', // Replace with your app password
+    password: 'asdasdf', // Replace with your app password
     host: 'imap.gmail.com',
     port: 993,
     tls: true,
@@ -54,8 +56,57 @@ imap.once('ready', function() {
                         fs.writeFileSync(htmlFilePath, html);
                         console.log(`Saved email-${seqno}.html`);
 
-                        // Send email as attachment
-                        sendEmailWithAttachment(emlFilePath, htmlFilePath);
+                        // Extract inline images
+                        const attachments = mail.attachments || [];
+                        const inlineImages = attachments.filter(att => att.contentDisposition === 'inline');
+                        const imageFilePaths = [];
+
+                        inlineImages.forEach((image, index) => {
+                            const imageFilePath = path.join(__dirname, `image-${seqno}-${index}.${image.contentType.split('/')[1]}`);
+                            fs.writeFileSync(imageFilePath, image.content);
+                            imageFilePaths.push(imageFilePath);
+                            console.log(`Saved inline image: ${imageFilePath}`);
+                        });
+
+                        // Create .msg file
+                        const msgFilePath = `email-${seqno}.msg`;
+                        const msg = mimemessage.factory({
+                            contentType: 'multipart/mixed',
+                            body: []
+                        });
+                        msg.header('From', mail.from.value.map(f => f.address).join(', '));
+                        msg.header('To', mail.to.value.map(t => t.address).join(', '));
+                        msg.header('Subject', mail.subject);
+
+                        const plainTextEntity = mimemessage.factory({
+                            contentType: 'text/plain',
+                            body: mail.text
+                        });
+                        msg.body.push(plainTextEntity);
+
+                        if (mail.html) {
+                            const htmlEntity = mimemessage.factory({
+                                contentType: 'text/html',
+                                body: mail.html
+                            });
+                            msg.body.push(htmlEntity);
+                        }
+
+                        attachments.forEach(att => {
+                            const attachmentEntity = mimemessage.factory({
+                                contentType: att.contentType,
+                                contentTransferEncoding: 'base64',
+                                body: att.content.toString('base64')
+                            });
+                            attachmentEntity.header('Content-Disposition', att.contentDisposition + `; filename="${att.filename}"`);
+                            msg.body.push(attachmentEntity);
+                        });
+
+                        fs.writeFileSync(msgFilePath, msg.toString());
+                        console.log(`Saved email-${seqno}.msg`);
+
+                        // Send email with attachments
+                        sendEmailWithAttachment(emlFilePath, htmlFilePath, imageFilePaths, msgFilePath);
                     });
                 });
             });
@@ -80,30 +131,43 @@ imap.once('end', function() {
 
 imap.connect();
 
-function sendEmailWithAttachment(emlFilePath, htmlFilePath) {
+function sendEmailWithAttachment(emlFilePath, htmlFilePath, imageFilePaths, msgFilePath) {
     const transporter = nodemailer.createTransport({
         service: 'gmail',
         auth: {
             user: 'xxxxx@gmail.com',
-            pass: 'xxxxx' // Replace with your email password or app password
+            pass: 'asdfadsf' // Replace with your email password or app password
         }
+    });
+
+    const attachments = [
+        {
+            filename: emlFilePath.split('/').pop(),
+            path: emlFilePath
+        },
+        {
+            filename: htmlFilePath.split('/').pop(),
+            path: htmlFilePath
+        },
+        {
+            filename: msgFilePath.split('/').pop(),
+            path: msgFilePath
+        }
+    ];
+
+    imageFilePaths.forEach(filePath => {
+        attachments.push({
+            filename: filePath.split('/').pop(),
+            path: filePath
+        });
     });
 
     const mailOptions = {
         from: 'xxxx@gmail.com', // Replace with your email
-        to: 'yyyy@gmail.com', // Replace with recipient email
+        to: 'xxxx@gmail.com', // Replace with recipient email
         subject: 'Forwarded Email',
-        text: 'Please find the attached email.',
-        attachments: [
-            {
-                filename: emlFilePath.split('/').pop(),
-                path: emlFilePath
-            },
-            {
-                filename: htmlFilePath.split('/').pop(),
-                path: htmlFilePath
-            }
-        ]
+        text: 'Please find the attached email and images.',
+        attachments: attachments
     };
 
     transporter.sendMail(mailOptions, function(error, info) {
